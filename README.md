@@ -37,7 +37,7 @@ docker buildx ls          # should show a builder named "default" or similar
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/<your-org>/UM-agBOT.git
+git clone https://github.com/UMagbot2025/UM-agBOT.git
 cd UM-agBOT
 ```
 
