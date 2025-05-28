@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install --no-cache-dir \
-      numpy opencv-python-headless onnx onnxruntime==1.10.0  
+       numpy==1.24.2 opencv-python-headless==4.7.0 onnx onnxruntime==1.10.0   
 
 COPY --from=builder /workspace/src /workspace/src
 WORKDIR /workspace
@@ -43,7 +43,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install --no-cache-dir \
-      numpy opencv-python-headless onnx onnxruntime-gpu==1.18.0
+      numpy==1.21.6 opencv-python-headless==4.5.5.64 onnx onnxruntime-gpu==1.18.0
 
 COPY --from=builder /workspace/src /workspace/src
 WORKDIR /workspace
