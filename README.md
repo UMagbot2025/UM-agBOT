@@ -133,7 +133,7 @@ docker buildx build \
 
 Team members can then pull with:
 ```bash
-docker pull <your-hub>/eggbot:<tag>
+docker pull ramatjyotsingh/eggbot:latest
 ```
 </details>
 
