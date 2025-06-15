@@ -1,55 +1,89 @@
 # syntax=docker/dockerfile:1.6
-ARG ROS_DISTRO=humble            # change here only if you switch ROS versions
 
-######################## 0.  Source-only stage ###############################
+ARG ROS_DISTRO=humble
+ARG TARGETPLATFORM=linux/amd64
+
+######################## 0. Builder Stage ###############################
 FROM ubuntu:22.04 AS builder
 WORKDIR /workspace
-COPY ./ros_ws/src/ ./src/          
 
+# Copy ROS2 source code
+COPY ./ros_ws/src/ ./src/
 
+######################## 1. Base Image Template #########################
+FROM --platform=$TARGETPLATFORM ros:${ROS_DISTRO}-ros-base AS base
 
-######################## 1A. Jetson TX2 final ################################
-FROM --platform=linux/arm64 \
-     dustynv/ros:${ROS_DISTRO}-pytorch-l4t-r32.7.1 AS final-arm64
-
+ARG ROS_DISTRO
 ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies and ROS packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      python3-colcon-common-extensions git python3-pip && \
+    build-essential \
+    python3-colcon-common-extensions \
+    python3-pip \
+    git \
+    usbutils \
+    locales-all \
+    dialog \
+    apt-utils \
+    ros-${ROS_DISTRO}-tf2-ros \
+    ros-${ROS_DISTRO}-image-transport \
+    ros-${ROS_DISTRO}-navigation2 \
+    ros-${ROS_DISTRO}-nav2-bringup \
+    ros-${ROS_DISTRO}-v4l2-camera && \
     rm -rf /var/lib/apt/lists/*
 
+# Install Python packages (including pypylon after Basler SDK will be installed in final images)
 RUN pip3 install --no-cache-dir \
-       numpy==1.24.2 opencv-python-headless==4.7.0 onnx onnxruntime==1.10.0   
+    numpy \
+    opencv-python-headless \
+    onnx \
+    onnxruntime-gpu
 
+######################## 1A. Jetson TX2 Final Image #####################
+FROM --platform=linux/arm64 base AS final-arm64
+
+# Copy and install ARM64 Basler pylon .deb packages
+COPY ./basler/pylon-arm64/*.deb /tmp/pylon/
+RUN dpkg -i /tmp/pylon/*.deb || apt-get install -f -y && rm -rf /tmp/pylon/
+
+# Install pypylon python package now that Basler SDK is installed
+RUN pip3 install --no-cache-dir pypylon
+
+# Copy ROS2 workspace source
 COPY --from=builder /workspace/src /workspace/src
 WORKDIR /workspace
+
+# Build ROS2 workspace
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     colcon build --symlink-install --install-base /workspace/install
 
-RUN echo 'source /opt/ros/${ROS_DISTRO}/setup.bash' >> /etc/bash.bashrc && \
-    echo 'source /workspace/install/setup.bash'     >> /etc/bash.bashrc
+# Setup environment on container start
+RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /etc/bash.bashrc && \
+    echo "source /workspace/install/setup.bash" >> /etc/bash.bashrc
+
 ENTRYPOINT ["/bin/bash"]
 
-######################## 1B. x86-64 final ####################################
-FROM --platform=linux/amd64 \
-     ros:${ROS_DISTRO}-ros-base AS final-amd64
+######################## 1B. x86_64 Final Image ##########################
+FROM --platform=linux/amd64 base AS final-amd64
 
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      python3-colcon-common-extensions git python3-pip \
-      ros-${ROS_DISTRO}-tf2-ros \
-      ros-${ROS_DISTRO}-image-transport \
-      ros-${ROS_DISTRO}-navigation2 ros-${ROS_DISTRO}-nav2-bringup \
-      ros-${ROS_DISTRO}-v4l2-camera && \
-    rm -rf /var/lib/apt/lists/*
+# Copy and install x86_64 Basler pylon .deb packages
+COPY ./basler/pylon-x86_64/*.deb /tmp/pylon/
+RUN dpkg -i /tmp/pylon/*.deb || apt-get install -f -y && rm -rf /tmp/pylon/
 
-RUN pip3 install --no-cache-dir \
-      numpy==1.21.6 opencv-python-headless==4.5.5.64 onnx onnxruntime-gpu==1.18.0
+# Install pypylon python package
+RUN pip3 install --no-cache-dir pypylon
 
+# Copy ROS2 workspace source
 COPY --from=builder /workspace/src /workspace/src
 WORKDIR /workspace
+
+# Build ROS2 workspace
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     colcon build --symlink-install --install-base /workspace/install
 
-RUN echo 'source /opt/ros/${ROS_DISTRO}/setup.bash' >> /etc/bash.bashrc && \
-    echo 'source /workspace/install/setup.bash'     >> /etc/bash.bashrc
+# Setup environment on container start
+RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /etc/bash.bashrc && \
+    echo "source /workspace/install/setup.bash" >> /etc/bash.bashrc
+
 ENTRYPOINT ["/bin/bash"]

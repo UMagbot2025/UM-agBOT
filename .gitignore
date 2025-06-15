@@ -1,0 +1,40 @@
+# Python cache and virtual envs
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+env/
+.venv/
+
+# ROS build, install, and log directories
+build/
+install/
+log/
+
+# Docker stuff
+*.deb
+*.tar.gz
+tmp/
+*.log
+
+# Basler pylon SDK packages (if you keep them locally)
+basler/*.deb
+
+# Models and large binaries
+*.onnx
+*.pt
+*.weights
+
+# IDE/editor config files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Other generated files
+dist/
