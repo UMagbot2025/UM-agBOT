@@ -10,13 +10,13 @@ WORKDIR /workspace
 # Copy ROS2 source code
 COPY ./ros_ws/src/ ./src/
 
-######################## 1. Base Image Template #########################
-FROM --platform=$TARGETPLATFORM ros:${ROS_DISTRO}-ros-base AS base
+######################## 1. Base Image for x86_64 #######################
+FROM --platform=linux/amd64 osrf/ros:${ROS_DISTRO}-desktop AS base-x86
 
 ARG ROS_DISTRO
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies and ROS packages
+# Install common system and ROS dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     python3-colcon-common-extensions \
@@ -30,60 +30,75 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-image-transport \
     ros-${ROS_DISTRO}-navigation2 \
     ros-${ROS_DISTRO}-nav2-bringup \
-    ros-${ROS_DISTRO}-v4l2-camera && \
+    ros-${ROS_DISTRO}-v4l2-camera \
+    ros-${ROS_DISTRO}-rqt \
+    ros-${ROS_DISTRO}-rqt-common-plugins \
+    ros-${ROS_DISTRO}-rviz2 && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Python packages (including pypylon after Basler SDK will be installed in final images)
+# Python packages
 RUN pip3 install --no-cache-dir \
     numpy \
     opencv-python-headless \
     onnx \
     onnxruntime-gpu
 
-######################## 1A. Jetson TX2 Final Image #####################
-FROM --platform=linux/arm64 base AS final-arm64
+######################## 1A. Jetson TX2 Final ###########################
+FROM --platform=linux/arm64 dustynv/ros:${ROS_DISTRO}-pytorch-l4t-r32.7.1 AS final-arm64
 
-# Copy and install ARM64 Basler pylon .deb packages
+ARG ROS_DISTRO
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-colcon-common-extensions \
+    python3-pip \
+    usbutils \
+    locales-all \
+    dialog \
+    apt-utils && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Python packages
+RUN pip3 install --no-cache-dir \
+    numpy \
+    opencv-python-headless \
+    onnx \
+    onnxruntime \
+    pypylon
+
+# Install Basler SDK
 COPY ./basler/pylon-arm64/*.deb /tmp/pylon/
 RUN dpkg -i /tmp/pylon/*.deb || apt-get install -f -y && rm -rf /tmp/pylon/
 
-# Install pypylon python package now that Basler SDK is installed
-RUN pip3 install --no-cache-dir pypylon
-
-# Copy ROS2 workspace source
+# Copy ROS source and build
 COPY --from=builder /workspace/src /workspace/src
 WORKDIR /workspace
-
-# Build ROS2 workspace
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     colcon build --symlink-install --install-base /workspace/install
 
-# Setup environment on container start
+# Set up entrypoint
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /etc/bash.bashrc && \
     echo "source /workspace/install/setup.bash" >> /etc/bash.bashrc
-
 ENTRYPOINT ["/bin/bash"]
 
-######################## 1B. x86_64 Final Image ##########################
-FROM --platform=linux/amd64 base AS final-amd64
+######################## 1B. x86_64 Final ################################
+FROM --platform=linux/amd64 base-x86 AS final-amd64
 
-# Copy and install x86_64 Basler pylon .deb packages
+# Install Basler SDK
 COPY ./basler/pylon-x86_64/*.deb /tmp/pylon/
 RUN dpkg -i /tmp/pylon/*.deb || apt-get install -f -y && rm -rf /tmp/pylon/
 
-# Install pypylon python package
+# Install pypylon
 RUN pip3 install --no-cache-dir pypylon
 
-# Copy ROS2 workspace source
+# Copy ROS source and build
 COPY --from=builder /workspace/src /workspace/src
 WORKDIR /workspace
-
-# Build ROS2 workspace
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     colcon build --symlink-install --install-base /workspace/install
 
-# Setup environment on container start
+# Set up entrypoint
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /etc/bash.bashrc && \
     echo "source /workspace/install/setup.bash" >> /etc/bash.bashrc
-
 ENTRYPOINT ["/bin/bash"]
