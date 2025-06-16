@@ -1,0 +1,241 @@
+Installation Guide for pylon 8 Software Suite for Linux
+========================================================
+
+
+System Requirements
+===================
+
+* x86_64 CPU:   Latest Intel Core i5 (or better) or equivalent.
+* aarch64 CPU:  Armv8-A with AArch64 support. ARM processors used on NVIDIA
+                Jetson modules (or better) or equivalent are recommended.
+* Memory:       Minimum 4 GB of available RAM. 8 GB or more of available RAM
+                are recommended.
+* Disk type:    SSD is recommended.
+* Disk space:   Minimum 2 GB of free disk space for installation.
+
+Note
+----
+Depending on the following aspects, higher system requirements may be
+necessary:
+* Number of cameras used
+* Resolution and/or acquisition frame rate of the camera
+* Types or number of pylon vTools used
+* Use of pylon AI (see below for detailed requirements)
+
+
+pylon AI System Requirements
+============================
+
+* x86_64 CPU:       Latest Intel Core i5 (or better) or equivalent.
+* Memory:           Minimum 8 GB of available RAM. 16 GB or more of available RAM
+                    are recommended.
+* Disk type:        SSD is recommended.
+* Disk space:       Minimum 50 GB of free disk space for installation.
+                    The space required for the model repository depends on the
+                    size and number of models you plan to deploy.
+                    Models can range from a few megabytes to several gigabytes each.
+* GPU models:       All NVIDIA models matching architectures mentioned here:
+                    https://docs.nvidia.com/deeplearning/frameworks/support-matrix/index.html
+* CUDA version:     12+
+* GPU cards:        Examples of suitable cards include NVIDIA RTX A5000, NVIDIA RTX A2000 
+                    Laptop GPU, NVIDIA Jetson Xavier NX, NVIDIA Tesla T4, etc.
+
+
+Installation of the Basler pylon Software Suite
+================================================
+
+To install the pylon Software Suite for Linux, you need the correct installation
+package for your architecture. Basler provides packages for x86_64 and arm64
+platforms.
+
+If you're using a Debian-based Linux distribution (e.g., Ubuntu) you can choose 
+one of the corresponding Debian packages provided with this pylon release.
+Alternatively, you can always use the tar.gz files, which will also work for
+Linux distributions not based on Debian.
+
+Note
+----
+To use the pylon Viewer, you must install the latest Mesa OpenGL driver for
+your system. On Debian-based platforms, you also need to install the
+following packages:
+      libglx-mesa0, libgl1, libxcb-xinerama0, libxcb-xinput0, libxcb-cursor0
+
+
+Installation Using Debian Packages
+==================================
+
+The Debian package will always install the pylon Software Suite in the
+/opt/pylon directory. On many Debian-based Linux distributions, you can install 
+the Debian package by double-clicking the file. Alternatively, follow these 
+these steps:
+
+  1. Change to the directory that contains the pylon Debian package.
+
+  2. Install the Debian packages:
+      sudo apt-get install ./pylon_*.deb ./codemeter*.deb
+      
+During the installation, an environment variable required for pylon GenTL
+producers and a permission file for Basler USB cameras are installed
+automatically. For this to take effect, you need to log out and log in again to
+your Linux system as well as unplug and replug all USB cameras.
+
+
+Installation of the CodeMeter Runtime
+-------------------------------------
+To use pylon vTools, the CodeMeter runtime must be installed first.
+The CodeMeter runtime is available as Debian package and is archived into a 
+tar.gz package together with the pylon Software Suite Debian package.
+On many Debian-based Linux distributions, you can install it by double-clicking
+the file. Alternatively, follow these steps:
+
+  1. Change to the directory that contains the CodeMeter Debian package.
+    
+  2. Install the package:
+      sudo apt-get install ./codemeter*.deb
+
+
+CoaXPress Cameras (x86_64 only)
+-------------------------------
+To operate CoaXPress cameras, a specific driver must be installed first. 
+After the installation of the pylon Software Suite, this driver can be found
+in /opt/pylon/share/pylon/menable-dkms_*.deb.
+On many Debian-based Linux distributions, you can install it by double-clicking
+the file. Alternatively, use the following command: 
+      sudo apt-get install /opt/pylon/share/pylon/menable-dkms_*.deb
+      
+You need to reboot your system in order to load the driver.
+
+
+Installation of the Basler Supplementary Package for MPEG-4 (Optional)
+----------------------------------------------------------------------
+The Basler Supplementary Package for MPEG-4 is an optional component that
+contains libraries for encoding MPEG-4 video files. You need to download
+this package separately from the Basler website in order to be able to create
+MPEG-4 files with pylon. 
+On many Debian-based Linux distributions, you can install it by double-clicking
+the file. Alternatively, follow these steps:
+
+  1. Change to the directory that contains the Supplementary Package for
+     MPEG-4 Debian package.
+    
+  2. Install the package:
+      sudo apt-get install ./pylon-supplementary-package-for-mpeg-4_*.deb 
+
+
+Installation using tar.gz files
+===============================
+
+This installation procedure assumes that you are going to install the pylon
+Software Suite in the /opt/pylon directory. If you choose to install in a
+different directory, you'll have to modify the directory names accordingly.
+Note: Root permissions are needed to write to /opt.
+
+To install the pylon Software Suite in /opt/pylon follow these steps:
+
+  1. Change to the directory that contains the pylon setup tar.gz archive that
+     you downloaded from the Basler website.
+
+  2. Extract the setup tar.gz archive into a directory of your choice (replace
+     ./pylon_setup if you want to extract into a different directory):
+      mkdir ./pylon_setup
+      tar -C ./pylon_setup -xzf ./pylon-*_setup.tar.gz
+
+  3. Change to the directory into which you extracted the setup tar.gz:
+      cd ./pylon_setup
+     
+  4. Extract the pylon SDK into /opt/pylon:
+      sudo tar -C /opt/pylon -xzf ./pylon-*.tar.gz
+
+  5. Change access rights of the pylon folder:
+      sudo chmod 755 /opt/pylon
+
+
+Installation of the CodeMeter Runtime
+-------------------------------------
+To use pylon vTools, the CodeMeter runtime must be installed first.
+The CodeMeter runtime is available as Debian and RPM package under, e.g.,:
+opt/pylon/share/pylon
+On many Debian-based Linux distributions, you can install it by double-clicking
+the file. Alternatively, follow these steps:
+
+  1. Change to the directory that contains the CodeMeter Debian package.
+
+  2. Install the package:
+      sudo apt-get install ./codemeter*.deb
+
+
+USB3 Vision cameras
+-------------------
+In order to use USB3 Vision cameras, you also need to install the udev-rules to
+set up permissions for Basler USB cameras by calling:
+      sudo /opt/pylon/share/pylon/setup-usb.sh
+
+After that, unplug and replug all USB cameras to get the udev rules applied.
+
+
+CoaXPress cameras (x86_64 only)
+-------------------------------
+For operating CoaXPress cameras, a driver must be installed first. After the 
+installation of the pylon Software Suite, this driver can be found in
+/opt/pylon/share/pylon/menable-driver-*.tar.gz.
+
+To install the CoaXPress driver, follow these steps: 
+
+  1. Change to the directory where you want to extract the driver to.
+  
+  2. Extract the driver archive:
+      sudo tar -C ./ -xzf /opt/pylon/share/pylon/menable-driver-*.tar.gz
+      
+  3. Follow the instructions in the ./menable-driver-*/linux/INSTALL file.
+      
+You need to reboot your system in order to load the driver.
+
+When starting an application (e.g., the pylon Viewer) that requires CoaXPress
+support, the GENICAM_GENTLXX_PATH environment variable, i.e., 
+GENICAM_GENTL64_PATH for 64-bit systems, must be set.
+The /opt/pylon/share/pylon/README document explains how to set this variable. 
+
+
+Installation of the Basler Supplementary Package for MPEG-4 (optional)
+----------------------------------------------------------------------
+The Basler Supplementary Package for MPEG-4 is an optional component that
+contains libraries for encoding MPEG-4 video files. You need to download
+this package separately from the Basler website in order to be able to create
+MPEG-4 files with pylon.
+
+To install the Basler Supplementary Package for MPEG-4 in /opt/pylon
+follow these steps:
+
+  1. Change to the directory that contains the pylon Basler Supplementary
+     Package for MPEG-4 setup tar.gz archive that you downloaded from the Basler
+     website.
+
+  2. Extract the setup tar.gz archive into a directory of your choice (replace
+     ./mpeg4_setup if you want to extract into a different directory):
+      mkdir ./mpeg4_setup
+      tar -C ./mpeg4_setup -xzf ./pylon-supplementary-package-for-mpeg-4_*_setup.tar.gz
+
+  3. Change to the directory into which you extracted the setup tar.gz:
+      cd ./mpeg4_setup
+     
+  4. Extract the Basler Supplementary Package for MPEG-4 into /opt/pylon:
+      sudo tar -C /opt/pylon -xzf ./pylon-supplementary-package-for-mpeg-4_*.tar.gz 
+
+
+Installation of the pylon Supplementary Package for pylon AI (optional)
+-----------------------------------------------------------------------
+The pylon Supplementary Package for pylon AI is an optional component for the
+pylon 8.x Software Suite that is required to run AI vTools and the pylon AI Agent.
+You need to download this package separately from the Basler website.
+
+For system requirements and installation instructions, refer to the Install 
+document that is included in the supplementary package.
+
+
+Usage
+=====
+
+For further information about how to use the pylon Software Suite and
+how to configure cameras and the host system, please read the README document
+that will be installed here:
+      /opt/pylon/share/pylon/README

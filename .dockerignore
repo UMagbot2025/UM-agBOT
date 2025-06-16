@@ -1,0 +1,41 @@
+# Ignore version control folders
+.git
+.gitignore
+
+# Ignore build artifacts and workspace install folders
+ros_ws/build
+ros_ws/install
+ros_ws/log
+
+# Ignore local IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ignore OS metadata files
+.DS_Store
+Thumbs.db
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore any log files
+*.log
+
+# Ignore large model or dataset files that should not be in image context
+*.onnx
+*.h5
+*.pt
+*.pth
+
+# Ignore basler .deb files if you prefer to copy from host explicitly
+# (uncomment if you want to exclude and handle .deb files outside context)
+# basler/pylon-arm64/*.deb
+# basler/pylon-x86_64/*.deb
+
+# Ignore Dockerfile (if building outside folder or you want to prevent it in context)
+# Dockerfile
