@@ -18,8 +18,7 @@ log/
 tmp/
 *.log
 
-# Basler pylon SDK packages (if you keep them locally)
-basler/*.deb
+
 
 # Models and large binaries
 *.onnx
