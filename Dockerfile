@@ -49,6 +49,9 @@ FROM --platform=linux/arm64 dustynv/ros:${ROS_DISTRO}-pytorch-l4t-r32.7.1 AS fin
 ARG ROS_DISTRO
 ENV DEBIAN_FRONTEND=noninteractive
 
+#temp fix for ros keyring
+RUN curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg 
+
 # Install system deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-colcon-common-extensions \
