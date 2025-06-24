@@ -12,8 +12,8 @@ build/
 install/
 log/
 
-# Docker stuff
 *.deb
+
 *.tar.gz
 tmp/
 *.log
