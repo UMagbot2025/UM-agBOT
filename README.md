@@ -141,15 +141,15 @@ docker run -it --rm \
 > bash
 > docker run -it --rm --runtime=nvidia ramatjyotsingh/eggbot\:latest
 
-````
+```
 
-Both start in `/workspace`, with ROS 2 Humble and your package overlay sourced.
+Both start in `/workspace`, with ROS 2 Humble and your package overlay sourced.
 
 ---
 
 ## Quick smoke tests
 
-### x86‑64 — Ultralytics v8
+### x86‑64 — Ultralytics v8
 
 ```bash
 docker run --rm ramatjyotsingh/eggbot:latest bash -c '
@@ -163,7 +163,7 @@ from ultralytics import YOLO
 model = YOLO("yolov8n.pt", verbose=False)
 print("Detections", model(np.zeros((320,320,3), np.uint8))[0].boxes.shape)
 PY'
-````
+```
 
 ### Jetson — YOLO v5 v6.2
 
@@ -209,9 +209,9 @@ All imports should print versions and end with **`Detections 0`** on a blank ima
 
 ## License
 
-* Dockerfile & build scripts: **MIT** (see LICENSE).<br>
-* YOLOv5: GPL‑3.0 (© Ultralytics).<br>
-* Basler Pylon SDK: © Basler AG, redistributable per their EULA.
+* Dockerfile & build scripts: **MIT** (see LICENSE)
+* YOLOv5: GPL‑3.0 (© Ultralytics)
+* Basler Pylon SDK: © Basler AG, redistributable per their EULA
 
 ---
 
