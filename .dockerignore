@@ -3,9 +3,13 @@
 .gitignore
 
 # Ignore build artifacts and workspace install folders
+# .dockerignore
 ros_ws/build
 ros_ws/install
 ros_ws/log
+
+*.ipynb_checkpoints
+*.pt
 
 # Ignore local IDE/editor files
 .vscode/

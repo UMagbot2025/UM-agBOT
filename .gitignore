@@ -12,14 +12,13 @@ build/
 install/
 log/
 
-# Docker stuff
 *.deb
+
 *.tar.gz
 tmp/
 *.log
 
-# Basler pylon SDK packages (if you keep them locally)
-basler/*.deb
+
 
 # Models and large binaries
 *.onnx
