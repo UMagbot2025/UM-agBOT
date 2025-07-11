@@ -6,7 +6,7 @@ __pycache__/
 venv/
 env/
 .venv/
-
+wheels/*
 # ROS build, install, and log directories
 build/
 install/
