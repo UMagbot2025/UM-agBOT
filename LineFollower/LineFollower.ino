@@ -4,10 +4,10 @@
 
 // Initialize motor shield
 Adafruit_MotorShield AFMS = Adafruit_MotorShield();
-Adafruit_DCMotor *motor1 = AFMS.getMotor(1); // left front
-Adafruit_DCMotor *motor2 = AFMS.getMotor(2); // right back
-Adafruit_DCMotor *motor3 = AFMS.getMotor(3); // right front
-Adafruit_DCMotor *motor4 = AFMS.getMotor(4); // left back
+Adafruit_DCMotor *motor1 = AFMS.getMotor(1); // Left front
+Adafruit_DCMotor *motor2 = AFMS.getMotor(2); // Left back
+Adafruit_DCMotor *motor3 = AFMS.getMotor(3); // Right front
+Adafruit_DCMotor *motor4 = AFMS.getMotor(4); // Right back
 
 // Initialize QTR sensor
 QTRSensors qtr;
@@ -30,9 +30,12 @@ void setup()
 
   // QTR Sensor setup: analog pins A8-A15
   qtr.setTypeAnalog();
-  qtr.setSensorPins((const uint8_t[]){A8, A9, A10, A11, A12, A13, A14, A15}, SensorCount);
+  qtr.setSensorPins((const uint8_t[]){A15, A14, A13, A12, A11, A10, A9, A8}, SensorCount);
   qtr.setEmitterPin(22);
-
+    
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH); // turn on Arduino's LED to indicate we are in calibration mode
+  
   delay(500);
 
   // Calibrate sensors (move robot over line during calibration)
@@ -47,47 +50,47 @@ void setup()
 
 void setMotorSpeed(int leftSpeed, int rightSpeed)
 {
-  leftSpeed = constrain(leftSpeed, -255, 255);
-  rightSpeed = constrain(rightSpeed, -255, 255);
+  leftSpeed = constrain(leftSpeed, -125, 125);
+  rightSpeed = constrain(rightSpeed, -125, 125);
 
   // Set left motors
   if (leftSpeed >= 0)
   {
     motor1->setSpeed(leftSpeed);
-    motor4->setSpeed(leftSpeed);
+    motor2->setSpeed(leftSpeed);
     motor1->run(FORWARD);
-    motor4->run(FORWARD);
+    motor2->run(FORWARD);
   }
   else
   {
     motor1->setSpeed(-leftSpeed);
-    motor4->setSpeed(-leftSpeed);
+    motor2->setSpeed(-leftSpeed);
     motor1->run(BACKWARD);
-    motor4->run(BACKWARD);
+    motor2->run(BACKWARD);
   }
 
   // Set right motors
   if (rightSpeed >= 0)
   {
-    motor2->setSpeed(rightSpeed);
     motor3->setSpeed(rightSpeed);
-    motor2->run(FORWARD);
+    motor4->setSpeed(rightSpeed);
     motor3->run(FORWARD);
+    motor4->run(FORWARD);
   }
   else
   {
-    motor2->setSpeed(-rightSpeed);
     motor3->setSpeed(-rightSpeed);
-    motor2->run(BACKWARD);
+    motor4->setSpeed(-rightSpeed);
     motor3->run(BACKWARD);
+    motor4->run(BACKWARD);
   }
 }
 
 void loop()
 {
   int position = qtr.readLineWhite(sensorValues);
+  
   int error = position - 3500;
-
   integral += error;
   int derivative = error - lastError;
   lastError = error;
@@ -95,6 +98,7 @@ void loop()
   int correction = Kp * error + Ki * integral + Kd * derivative;
 
   int baseSpeed = 100;
+  
   int leftMotorSpeed = baseSpeed - correction;
   int rightMotorSpeed = baseSpeed + correction;
 
