@@ -1,125 +1,159 @@
 # syntax=docker/dockerfile:1.7
 ###############################################################################
-# Build-time ARGs (shared by every stage)
+# Multi‑arch ROS 2 **Humble** + Ultralytics YOLO + Basler Pylon 7.x
+#   • x86‑64 dev   – Ubuntu 20.04 (Focal)
+#   • Jetson TX2   – Ubuntu 18.04 (Bionic) via Dusty‑nv ROS + PyTorch image
 ###############################################################################
-ARG ROS_DISTRO=humble
-ARG PYLON_VERSION=8.1.0          # Basler SDK pin
 
+ARG ROS_DISTRO=humble                              # LTS until May 2027
+ARG PYLON_VERSION=7.3.0                            # Basler SDK version (informational)
+ARG DUSTY_TAG=humble-pytorch-l4t-r32.7.1           # Dusty‑nv tag for JetPack 4.6.6
+# ------------------------------------------------------------------------------
+# ONNX Runtime (GPU) settings – Jetson TX2 / JetPack 4.6.x
+#   • Pick the wheel that matches the Python ABI inside Dusty-nv images
+#     (they currently ship Python 3.8     → “cp38-cp38”)
+#   • Wheels are hosted on NVIDIA’s Box CDN and catalogued in Jetson Zoo.
+# ------------------------------------------------------------------------------
+ARG ORT_VERSION=1.11.0           
+ARG ORT_WHL_URL=https://nvidia.box.com/shared/static/pmsqsiaw4pg9qrbeckcbymho6c01jj4z.whl 
+    # ↳ onnxruntime_gpu-${ORT_VERSION}-cp38-cp38-linux_aarch64.whl
 ###############################################################################
-# 0. Source layer – tiny: ROS workspace sources
+# 0.  Common sources (ROS workspace + Python deps)
 ###############################################################################
-FROM ubuntu:22.04 AS src
-RUN apt-get update \
- && apt-get install -y --no-install-recommends git \
- && rm -rf /var/lib/apt/lists/*
+FROM ubuntu:20.04 AS src
+RUN apt-get update && apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
 WORKDIR /workspace
+# ► Your ROS 2 packages
 COPY ./ros_ws/src/ ./src/
 
 ###############################################################################
-# 1A. Builder – x86-64 (CPU-only)
+# 1A.  ⛵ Builder (x86‑64 dev)
 ###############################################################################
 FROM --platform=linux/amd64 osrf/ros:${ROS_DISTRO}-desktop AS build-amd64
+ARG ROS_DISTRO
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
-    TMPDIR=/tmp
+    PYTHONUNBUFFERED=1
+
+# — Basler Pylon SDK (x86‑64) ————————————————————————————————
+COPY basler/pylon-x86_64/*.deb /tmp/
+RUN apt-get update && apt-get install -y /tmp/pylon_* && \
+    rm -rf /tmp/* /var/lib/apt/lists/*
+
+# — Build deps ———————————————————————————————————————————————————————
 RUN --mount=type=cache,target=/var/cache/apt \
     apt-get update && apt-get install -y --no-install-recommends \
-        bash-completion python3-argcomplete build-essential \
-        python3-colcon-common-extensions python3-pip \
-        usbutils locales-all dialog git && \
-    rm -rf /var/lib/apt/lists/*
+        build-essential python3-argcomplete python3-colcon-common-extensions \
+        python3-pip python3-dev usbutils bash-completion \
+    && apt-get -y purge python3-sympy \  
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PIP_NO_CACHE_DIR=1 PYTHONUNBUFFERED=1
 RUN --mount=type=cache,target=/root/.cache/pip \
-    python3 -m pip install --prefer-binary \
-        --extra-index-url https://download.pytorch.org/whl/cpu \
-        torch torchvision torchaudio \
-        numpy opencv-python-headless pypylon ultralytics && \
-    rm -rf /root/.cache/pip/* $TMPDIR/*
-COPY basler/pylon-x86_64/*.deb /tmp/pylon/
-RUN apt-get update && apt-get install -y /tmp/pylon/*.deb \
- && rm -rf /tmp/pylon /var/lib/apt/lists/*
+    pip3 install --no-cache-dir --upgrade pip setuptools wheel \
+    && pip3 install --no-cache-dir numpy opencv-python ultralytics pypylon onnxruntime
+
+
+# — ROS workspace build ————————————————————————————————————————
 COPY --from=src /workspace/src /workspace/src
 WORKDIR /workspace
-RUN bash -c "source /opt/ros/${ROS_DISTRO}/setup.sh && colcon build --merge-install"
+RUN /bin/bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && colcon build --merge-install"
+
+# — Entrypoint helper ——————————————————————————————————————————
 RUN printf '#!/bin/bash\nsource /opt/ros/${ROS_DISTRO}/setup.bash\n'  > /ros_entrypoint.sh && \
-    printf 'source /workspace/install/setup.bash\nexec "$@"\n'        >> /ros_entrypoint.sh && \
+    printf 'source /workspace/install/setup.bash\nexec "$@"\n'     >> /ros_entrypoint.sh && \
     chmod +x /ros_entrypoint.sh
 
 ###############################################################################
-# 1B. Runtime – x86-64 (slim)
+# 1B.  🏃 Runtime (x86‑64 dev)
 ###############################################################################
 FROM --platform=linux/amd64 osrf/ros:${ROS_DISTRO}-desktop AS runtime-amd64
 ARG ROS_DISTRO
+ENV PYTHONPATH=/usr/local/lib:${PYTHONPATH}
+
 COPY --from=build-amd64 /workspace/install /workspace/install
-COPY --from=build-amd64 /usr/local/lib/python3.*/dist-packages/ /usr/local/lib/
+COPY --from=build-amd64 /usr/local/lib/python3*/dist-packages/ /usr/local/lib/
 COPY --from=build-amd64 /usr/lib/libpylon* /usr/lib/
 COPY --from=build-amd64 /ros_entrypoint.sh /ros_entrypoint.sh
+
+
+
 RUN echo 'source /opt/ros/${ROS_DISTRO}/setup.bash' >> /etc/bash.bashrc && \
-    echo 'source /workspace/install/setup.bash'     >> /etc/bash.bashrc && \
-    echo 'eval "$(register-python-argcomplete3 ros2)"'  >> /etc/bash.bashrc && \
-    echo 'eval "$(register-python-argcomplete3 colcon)"'>> /etc/bash.bashrc
+    echo 'source /workspace/install/setup.bash'     >> /etc/bash.bashrc
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]
 
 ###############################################################################
-# 2A. Builder – Jetson TX2 (arm64 + CUDA/TensorRT)
+# 2A.  ⛵ Builder (arm64 – Jetson)
 ###############################################################################
-FROM --platform=linux/arm64 dustynv/ros:${ROS_DISTRO}-desktop-l4t-r32.7.1 AS build-arm64
+FROM --platform=linux/arm64 dustynv/ros:${DUSTY_TAG} AS build-arm64
+ARG ROS_DISTRO
+ARG ORT_VERSION
+ARG ORT_WHL_URL
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
-    TMPDIR=/tmp
-RUN curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
-    -o /usr/share/keyrings/ros-archive-keyring.gpg
-RUN --mount=type=cache,target=/var/cache/apt \
-    apt-get update && apt-get install -y --no-install-recommends \
-        bash-completion python3-argcomplete build-essential \
-        python3-colcon-common-extensions python3-pip \
-        python3-opencv protobuf-compiler libprotobuf-dev \
-        usbutils locales-all dialog git && \
+    PYTHONUNBUFFERED=1
+RUN curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+
+# — Dev tool‑chain (colcon, gcc, etc.) ———————————————————————————
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential python3-argcomplete python3-colcon-common-extensions \
+        python3-pip python3-dev usbutils bash-completion && \
     rm -rf /var/lib/apt/lists/*
-# ── Python deps + YOLOv5 clone (no editable install) ─────────────────────────
-RUN --mount=type=cache,target=/root/.cache/pip \
-    python3 -m pip install --prefer-binary numpy pypylon && \
-    git clone --depth 1 --branch v6.2 https://github.com/ultralytics/yolov5.git /opt/yolov5 && \
-    sed -i '/opencv-python/d;/PyYAML/d' /opt/yolov5/requirements.txt && \
-    pip3 install --no-cache-dir --prefer-binary -r /opt/yolov5/requirements.txt && \
-    rm -rf /root/.cache/pip/* $TMPDIR/*
-ENV PYTHONPATH=/opt/yolov5:$PYTHONPATH
-# ── Basler SDK ───────────────────────────────────────────────────────────────
-COPY basler/pylon-arm64/*.deb /tmp/pylon/
-RUN apt-get update && apt-get install -y /tmp/pylon/*.deb \
- && rm -rf /tmp/pylon /var/lib/apt/lists/*
+
+# Replace wget download with COPY from local wheels directory
+COPY wheels/onnxruntime_gpu-${ORT_VERSION}-cp36-cp36m-linux_aarch64.whl /tmp/
+RUN python -m pip install /tmp/onnxruntime_gpu-${ORT_VERSION}-cp36-cp36m-linux_aarch64.whl && rm /tmp/onnxruntime_gpu-${ORT_VERSION}-cp36-cp36m-linux_aarch64.whl
+
+# — Basler Pylon SDK (arm64) ————————————————————————————————
+COPY basler/pylon-arm64/*.deb /tmp/
+RUN apt-get update && apt-get install -y /tmp/pylon_* && \
+    rm -rf /tmp/* /var/lib/apt/lists/*
+
+
+
+# — ROS workspace build ————————————————————————————————————————
 COPY --from=src /workspace/src /workspace/src
 WORKDIR /workspace
-RUN bash -c "source /opt/ros/${ROS_DISTRO}/install/setup.sh && colcon build --merge-install"
-RUN printf '#!/bin/bash\nsource /opt/ros/${ROS_DISTRO}/install/setup.bash\n' > /ros_entrypoint.sh && \
-    printf 'source /workspace/install/setup.bash\nexec "$@"\n'              >> /ros_entrypoint.sh && \
+RUN /bin/bash -c "source /opt/ros/${ROS_DISTRO}/install/setup.bash && colcon build --merge-install"
+
+# — Entrypoint helper ——————————————————————————————————————————
+RUN printf '#!/bin/bash\nsource /opt/ros/${ROS_DISTRO}/install/setup.bash\n'  > /ros_entrypoint.sh && \
+    printf 'source /workspace/install/setup.bash\nexec "$@"\n'     >> /ros_entrypoint.sh && \
     chmod +x /ros_entrypoint.sh
 
 ###############################################################################
-# 2B. Runtime – Jetson TX2 (slim)
+# 2B.  🏃 Runtime (arm64 – Jetson)
 ###############################################################################
-FROM --platform=linux/arm64 dustynv/ros:${ROS_DISTRO}-desktop-l4t-r32.7.1 AS runtime-arm64
-ARG ROS_DISTRO
+FROM dustynv/ros:${DUSTY_TAG} AS runtime-arm64
+ENV PYTHONPATH=/usr/local/lib:${PYTHONPATH}
+RUN curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+ARG ORT_VERSION
+ARG ORT_WHL_URL
+# — Basler Pylon runtime libs —————————————————————————————————————
+COPY basler/pylon-arm64/*.deb /tmp/
+RUN apt-get update && apt-get install -y /tmp/pylon_* && \
+    rm -rf /tmp/* /var/lib/apt/lists/*
+
+RUN pip3 install --no-cache-dir pypylon
+
+# Replace wget download with COPY from local wheels directory
+COPY wheels/onnxruntime_gpu-${ORT_VERSION}-cp36-cp36m-linux_aarch64.whl /tmp/
+RUN python -m pip install /tmp/onnxruntime_gpu-${ORT_VERSION}-cp36-cp36m-linux_aarch64.whl && rm /tmp/onnxruntime_gpu-${ORT_VERSION}-cp36-cp36m-linux_aarch64.whl
+# — Basler udev rules —————————————————————————————————————————
+RUN echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="2676", MODE="0666"' > /etc/udev/rules.d/99-basler.rules
+
+# — ROS workspace from builder ———————————————————————————————
 COPY --from=build-arm64 /workspace/install /workspace/install
-COPY --from=build-arm64 /usr/local/lib/python3.*/dist-packages/ /usr/local/lib/
-COPY --from=build-arm64 /usr/lib/libpylon* /usr/lib/
-COPY --from=build-arm64 /opt/yolov5 /opt/yolov5
 COPY --from=build-arm64 /ros_entrypoint.sh /ros_entrypoint.sh
-ENV PYTHONPATH=/opt/yolov5:$PYTHONPATH
-RUN echo 'source /opt/ros/${ROS_DISTRO}/setup.bash' >> /etc/bash.bashrc && \
-    echo 'source /workspace/install/setup.bash'     >> /etc/bash.bashrc && \
-    echo 'eval "$(register-python-argcomplete3 ros2)"'  >> /etc/bash.bashrc && \
-    echo 'eval "$(register-python-argcomplete3 colcon)"'>> /etc/bash.bashrc
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]
 
 ###############################################################################
-# 3. Multi-arch build helper (comment only – not executed)
+# 3️⃣  Output – choose platform at build time
 ###############################################################################
-# docker buildx build --push \
-#     --platform linux/amd64 --target runtime-amd64 -t you/egg-sorter:amd64 .
-# docker buildx build --push \
-#     --platform linux/arm64 --target runtime-arm64 -t you/egg-sorter:arm64 .
-# docker buildx imagetools create -t you/egg-sorter:latest \
-#     you/egg-sorter:amd64 \
-#     you/egg-sorter:arm64
+# Build examples:
+#   docker buildx create --name eggbot --use
+#   docker buildx build --platform linux/amd64,linux/arm64 \
+#       -t yourrepo/eggbot:humble --push .
