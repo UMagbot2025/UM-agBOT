@@ -14,46 +14,42 @@ QTRSensors qtr;
 const uint8_t SensorCount = 8;
 uint16_t sensorValues[SensorCount];
 
-// PID control parameters
-float Kp = 0.1;
-float Ki = 0.0;
-float Kd = 0.05;
-
-int lastError = 0;
-int integral = 0;
-
-void setup()
+// Proportional control only
+float Kp = 0.4;
+float Kd = 0.2; // Note that Kp < Kd
+xvoid setup()
 {
   Serial.begin(9600);
-
   AFMS.begin();
 
   // QTR Sensor setup: analog pins A8-A15
   qtr.setTypeAnalog();
   qtr.setSensorPins((const uint8_t[]){A15, A14, A13, A12, A11, A10, A9, A8}, SensorCount);
   qtr.setEmitterPin(22);
-    
+
   pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH); // turn on Arduino's LED to indicate we are in calibration mode
-  
+  digitalWrite(LED_BUILTIN, HIGH); // Indicate calibration mode
+
   delay(500);
 
-  // Calibrate sensors (move robot over line during calibration)
-  for (int i = 0; i < 400; i++)
+  // Calibrate sensors
+  for (int i = 0; i < 200; i++)
   {
     qtr.calibrate();
+    Serial.println(i);
     delay(20);
   }
 
+  digitalWrite(LED_BUILTIN, LOW);
   Serial.println("Calibration complete.");
 }
 
 void setMotorSpeed(int leftSpeed, int rightSpeed)
 {
-  leftSpeed = constrain(leftSpeed, -125, 125);
-  rightSpeed = constrain(rightSpeed, -125, 125);
+  leftSpeed = constrain(leftSpeed, -175, 175);
+  rightSpeed = constrain(rightSpeed, -175, 175);
 
-  // Set left motors
+  // Left motors
   if (leftSpeed >= 0)
   {
     motor1->setSpeed(leftSpeed);
@@ -69,7 +65,7 @@ void setMotorSpeed(int leftSpeed, int rightSpeed)
     motor2->run(BACKWARD);
   }
 
-  // Set right motors
+  // Right motors
   if (rightSpeed >= 0)
   {
     motor3->setSpeed(rightSpeed);
@@ -86,19 +82,17 @@ void setMotorSpeed(int leftSpeed, int rightSpeed)
   }
 }
 
+int lastError = 0;
+
 void loop()
 {
   int position = qtr.readLineWhite(sensorValues);
-  
   int error = position - 3500;
-  integral += error;
-  int derivative = error - lastError;
+  int correction = KP * error + KD * (error - lastError);
   lastError = error;
+  // int correction = KP * error;
 
-  int correction = Kp * error + Ki * integral + Kd * derivative;
-
-  int baseSpeed = 100;
-  
+  int baseSpeed = 90;
   int leftMotorSpeed = baseSpeed - correction;
   int rightMotorSpeed = baseSpeed + correction;
 
