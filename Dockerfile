@@ -52,7 +52,7 @@ RUN --mount=type=cache,target=/var/cache/apt \
 ENV PIP_NO_CACHE_DIR=1 PYTHONUNBUFFERED=1
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip3 install --no-cache-dir --upgrade pip setuptools wheel \
-    && pip3 install --no-cache-dir numpy opencv-python ultralytics pypylon onnxruntime
+    && pip3 install --no-cache-dir numpy opencv-python pypylon onnxruntime
 
 
 # — ROS workspace build ————————————————————————————————————————
