@@ -78,7 +78,7 @@ ENV PYTHONPATH=/usr/local/lib:${PYTHONPATH}
 COPY --from=build-amd64 /workspace/install /workspace/install
 COPY --from=build-amd64 /usr/local/lib/python3*/dist-packages/ /usr/local/lib/
 COPY --from=build-amd64 /usr/lib/libpylon* /usr/lib/
-COPY --from=build-amd64 /ros_entrypoint.sh /ros_entrypoint.sh
+COPY --from=build-amd64 /ros_entrypoint.sh /ros_entrypoint.shros_ws
 
 
 
