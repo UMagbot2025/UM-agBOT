@@ -16,10 +16,18 @@ uint16_t sensorValues[SensorCount];
 
 // Proportional control only
 float Kp = 0.4;
-float Kd = 0.1; // Note that Kp < Kd
+float Kd = 0.1;
+
+// Robot state
+bool robotActive = true;
+String inputString = "";
+bool stringComplete = false;
+
 void setup()
 {
   Serial.begin(9600);
+  inputString.reserve(50);
+  
   AFMS.begin();
 
   // QTR Sensor setup: analog pins A8-A15
@@ -82,21 +90,63 @@ void setMotorSpeed(int leftSpeed, int rightSpeed)
   }
 }
 
+void stopMotors() {
+  motor1->setSpeed(0);
+  motor2->setSpeed(0);
+  motor3->setSpeed(0);
+  motor4->setSpeed(0);
+  
+  motor1->run(RELEASE);
+  motor2->run(RELEASE);
+  motor3->run(RELEASE);
+  motor4->run(RELEASE);
+}
+
 int lastError = 0;
 
 void loop()
 {
-  int position = qtr.readLineWhite(sensorValues);
-  int error = position - 3500;
-  int correction = Kp * error + Kd * (error - lastError);
-  lastError = error;
-  // int correction = KP * error;
+  // Process any incoming serial commands
+  if (stringComplete) {
+    if (inputString.indexOf("STOP") >= 0) {
+      robotActive = false;
+      stopMotors();
+      Serial.println("Robot stopped");
+    } 
+    else if (inputString.indexOf("RESUME") >= 0) {
+      robotActive = true;
+      Serial.println("Robot resumed");
+    }
+    
+    // Clear the string
+    inputString = "";
+    stringComplete = false;
+  }
+  
+  // Only run line following if robot is active
+  if (robotActive) {
+    int position = qtr.readLineWhite(sensorValues);
+    int error = position - 3500;
+    int correction = Kp * error + Kd * (error - lastError);
+    lastError = error;
 
-  int baseSpeed = 75;
-  int leftMotorSpeed = baseSpeed - correction;
-  int rightMotorSpeed = baseSpeed + correction;
+    int baseSpeed = 75;
+    int leftMotorSpeed = baseSpeed - correction;
+    int rightMotorSpeed = baseSpeed + correction;
 
-  setMotorSpeed(leftMotorSpeed, rightMotorSpeed);
+    setMotorSpeed(leftMotorSpeed, rightMotorSpeed);
+  }
 
   delay(10);
+}
+
+// Serial event function
+void serialEvent() {
+  while (Serial.available()) {
+    char inChar = (char)Serial.read();
+    inputString += inChar;
+    if (inChar == '\n') {
+      stringComplete = true;
+    }
+  }
 }

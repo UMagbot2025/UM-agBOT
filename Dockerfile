@@ -51,14 +51,17 @@ RUN --mount=type=cache,target=/var/cache/apt \
 
 ENV PIP_NO_CACHE_DIR=1 PYTHONUNBUFFERED=1
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3 install --no-cache-dir --upgrade pip setuptools wheel \
+    pip3 install --no-cache-dir --upgrade pip "setuptools<66" wheel \
     && pip3 install --no-cache-dir numpy opencv-python pypylon onnxruntime
 
 
 # — ROS workspace build ————————————————————————————————————————
 COPY --from=src /workspace/src /workspace/src
 WORKDIR /workspace
-RUN /bin/bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && colcon build --merge-install"
+RUN /bin/bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && \
+    colcon build --packages-select agbot_interfaces --merge-install && \
+    source install/setup.bash && \
+    colcon build --merge-install"
 
 # — Entrypoint helper ——————————————————————————————————————————
 RUN printf '#!/bin/bash\nsource /opt/ros/${ROS_DISTRO}/setup.bash\n'  > /ros_entrypoint.sh && \
@@ -116,7 +119,10 @@ RUN apt-get update && apt-get install -y /tmp/pylon_* && \
 # — ROS workspace build ————————————————————————————————————————
 COPY --from=src /workspace/src /workspace/src
 WORKDIR /workspace
-RUN /bin/bash -c "source /opt/ros/${ROS_DISTRO}/install/setup.bash && colcon build --merge-install"
+RUN /bin/bash -c "source /opt/ros/${ROS_DISTRO}/install/setup.bash && \
+    colcon build --packages-select agbot_interfaces --merge-install && \
+    source install/setup.bash && \
+    colcon build --merge-install"
 
 # — Entrypoint helper ——————————————————————————————————————————
 RUN printf '#!/bin/bash\nsource /opt/ros/${ROS_DISTRO}/install/setup.bash\n'  > /ros_entrypoint.sh && \

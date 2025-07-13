@@ -2,7 +2,7 @@ from setuptools import setup
 import os
 from glob import glob
 
-package_name = 'vision'
+package_name = 'navigation'
 
 setup(
     name=package_name,
@@ -14,16 +14,16 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
     ],
-    install_requires=['setuptools'],
+    install_requires=['setuptools', 'pyserial'],
     zip_safe=True,
     maintainer='darkness',
     maintainer_email='user@example.com',
-    description='Egg detection using ONNX inference',
+    description='Robot navigation node',
     license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'egg_detector = vision.egg_detector:main',
+            'navigation_node = navigation.navigation_node:main',
         ],
     },
 )

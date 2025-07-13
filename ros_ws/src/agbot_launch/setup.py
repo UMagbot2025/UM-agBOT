@@ -2,7 +2,7 @@ from setuptools import setup
 import os
 from glob import glob
 
-package_name = 'vision'
+package_name = 'agbot_launch'
 
 setup(
     name=package_name,
@@ -18,12 +18,11 @@ setup(
     zip_safe=True,
     maintainer='darkness',
     maintainer_email='user@example.com',
-    description='Egg detection using ONNX inference',
+    description='AgBot launch files',
     license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'egg_detector = vision.egg_detector:main',
         ],
     },
 )

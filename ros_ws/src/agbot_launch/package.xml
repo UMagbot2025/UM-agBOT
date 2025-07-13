@@ -1,19 +1,17 @@
+# filepath: /home/darkness/UM-agBOT/ros_ws/src/agbot_launch/package.xml
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>navigation</name>
+  <name>agbot_launch</name>
   <version>0.0.0</version>
-  <description>Robot navigation node</description>
+  <description>AgBot launch files</description>
   <maintainer email="user@example.com">darkness</maintainer>
   <license>TODO: License declaration</license>
 
-  <depend>rclpy</depend>
-  <depend>std_msgs</depend>
-
-  <test_depend>ament_copyright</test_depend>
-  <test_depend>ament_flake8</test_depend>
-  <test_depend>ament_pep257</test_depend>
-  <test_depend>python3-pytest</test_depend>
+  <exec_depend>vision</exec_depend>
+  <exec_depend>navigation</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>
