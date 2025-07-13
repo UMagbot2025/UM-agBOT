@@ -16,8 +16,8 @@ uint16_t sensorValues[SensorCount];
 
 // Proportional control only
 float Kp = 0.4;
-float Kd = 0.2; // Note that Kp < Kd
-xvoid setup()
+float Kd = 0.1; // Note that Kp < Kd
+void setup()
 {
   Serial.begin(9600);
   AFMS.begin();
@@ -46,8 +46,8 @@ xvoid setup()
 
 void setMotorSpeed(int leftSpeed, int rightSpeed)
 {
-  leftSpeed = constrain(leftSpeed, -175, 175);
-  rightSpeed = constrain(rightSpeed, -175, 175);
+  leftSpeed = constrain(leftSpeed, -225, 225);
+  rightSpeed = constrain(rightSpeed, -225, 225);
 
   // Left motors
   if (leftSpeed >= 0)
@@ -88,11 +88,11 @@ void loop()
 {
   int position = qtr.readLineWhite(sensorValues);
   int error = position - 3500;
-  int correction = KP * error + KD * (error - lastError);
+  int correction = Kp * error + Kd * (error - lastError);
   lastError = error;
   // int correction = KP * error;
 
-  int baseSpeed = 90;
+  int baseSpeed = 75;
   int leftMotorSpeed = baseSpeed - correction;
   int rightMotorSpeed = baseSpeed + correction;
 
