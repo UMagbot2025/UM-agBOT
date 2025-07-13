@@ -8,6 +8,7 @@ from rclpy.node import Node
 from std_msgs.msg import Bool
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
+from pypylon import pylon
 
 class EggDetectionNode(Node):
     def __init__(self):
@@ -22,6 +23,8 @@ class EggDetectionNode(Node):
         self.declare_parameter('min_box_area', 500.0)
         self.declare_parameter('input_size', 640)
         self.declare_parameter('use_basler', True)
+        self.declare_parameter('use_mock', False)
+        self.declare_parameter('test_images_dir', '')
         
         # Get parameters
         self.model_path = self.get_parameter('model_path').value
@@ -29,6 +32,8 @@ class EggDetectionNode(Node):
         self.min_box_area = self.get_parameter('min_box_area').value
         self.input_size = self.get_parameter('input_size').value
         self.use_basler = self.get_parameter('use_basler').value
+        self.use_mock = self.get_parameter('use_mock').value
+        self.test_images_dir = self.get_parameter('test_images_dir').value
         
         # Load ONNX model
         self.get_logger().info(f"Loading model from {self.model_path}")
@@ -38,14 +43,38 @@ class EggDetectionNode(Node):
         self.bridge = CvBridge()
         
         # Setup camera based on parameter
-        if self.use_basler:
+        if self.use_mock:
+            self.setup_mock_camera()
+        elif self.use_basler:
             self.setup_basler_camera()
         else:
             self.setup_webcam()
             
         # Create timer for processing frames
         self.timer = self.create_timer(0.1, self.process_frame)
-        
+    
+    def setup_mock_camera(self):
+        # Import the mock camera module
+        try:
+            from vision.mock_camera import MockBaslerCamera, MockImageConverter
+            self.get_logger().info("Setting up mock Basler camera")
+            
+            # Create mock Basler camera
+            self.camera = MockBaslerCamera(self, self.test_images_dir)
+            self.camera.Open()
+            
+            # Set up mock image converter
+            self.converter = MockImageConverter()
+            
+            # Start grabbing images
+            self.camera.StartGrabbing("LatestImageOnly")
+            self.get_logger().info("Mock Basler camera initialized")
+            self.camera_type = "basler"
+            
+        except ImportError as e:
+            self.get_logger().error(f"Failed to import mock camera: {e}")
+            self.setup_webcam()
+            
     def setup_basler_camera(self):
         try:
             from pypylon import pylon

@@ -16,7 +16,7 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='darkness',
+    maintainer='user',
     maintainer_email='user@example.com',
     description='AgBot launch files',
     license='TODO: License declaration',
