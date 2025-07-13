@@ -15,7 +15,7 @@ const uint8_t SensorCount = 8;
 uint16_t sensorValues[SensorCount];
 
 // Proportional control only
-float Kp = 0.4;
+float Kp = 0.9;
 float Kd = 0.1; // Note that Kp < Kd
 void setup()
 {
@@ -83,20 +83,53 @@ void setMotorSpeed(int leftSpeed, int rightSpeed)
 }
 
 int lastError = 0;
+uint16_t lastSensorValues[SensorCount];
+unsigned long lastChangeTime = 0;
+const unsigned long STUCK_TIMEOUT = 5000; // 5 seconds
+const int STUCK_TOLERANCE = 50;
+bool isStuck = false;
 
 void loop()
 {
+  qtr.read(sensorValues);
+
+  // Check if all sensor values are within ±50 of previous readings
+  bool allWithinRange = true;
+  for (int i = 0; i < SensorCount; i++) {
+    if (abs(sensorValues[i] - lastSensorValues[i]) > STUCK_TOLERANCE) {
+      allWithinRange = false;
+      break;
+    }
+  }
+
+  // Update stuck detection logic
+  if (!allWithinRange) {
+    lastChangeTime = millis();
+    isStuck = false;
+  } else if (millis() - lastChangeTime > STUCK_TIMEOUT) {
+    isStuck = true;
+  }
+
+  // Save current values for next loop
+  for (int i = 0; i < SensorCount; i++) {
+    lastSensorValues[i] = sensorValues[i];
+  }
+
   int position = qtr.readLineWhite(sensorValues);
   int error = position - 3500;
   int correction = Kp * error + Kd * (error - lastError);
   lastError = error;
-  // int correction = KP * error;
 
-  int baseSpeed = 75;
+  int baseSpeed = isStuck ? 140 : 90;  // boost speed if stuck
   int leftMotorSpeed = baseSpeed - correction;
   int rightMotorSpeed = baseSpeed + correction;
 
   setMotorSpeed(leftMotorSpeed, rightMotorSpeed);
 
+  if (isStuck) {
+    Serial.println("Stuck (within ±50 range)! Giving it some umph...");
+  }
+
   delay(10);
 }
+
