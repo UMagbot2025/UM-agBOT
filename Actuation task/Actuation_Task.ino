@@ -1,17 +1,31 @@
+/*
+  agBOT - Line follow -> Double-plant detection (dual Pixy2) -> Arm alignment -> Arm activation
+  ------------------------------------------------------------------------------------------
+  Logic:
+    1) LINE_FOLLOWING: drive on the line using PID on the QTR-8RC array (mecanum wheels
+       driven like tank-drive: left pair vs right pair get different step rates).
+    2) When BOTH the left and right Pixy2 cameras see BOTH signature 1 AND signature 2
+       at the same time (a "double plant" on both sides), stop.
+    3) ARM_ALIGN: drive forward/back a fixed calibrated step count so the arms line up
+       exactly on the plant (see alignArms()).
+    4) ARM_ACTIVE: energize M1/M2 for a fixed time to run the arm motors.
+
+  !!! CONFIGURE THE "USER-CONFIGURABLE CONSTANTS" SECTION BELOW BEFORE RUNNING !!!
+  I don't know your exact wiring for the second Pixy2 or the arm motor driver, so
+  those pins are placeholders - see comments.
+*/
+
 #include <QTRSensors.h>
 #include <SPI.h>
-#include <Pixy2SPI_SS.h> // Pixy2 variant that supports a custom Slave-Select pin,
-                         // which lets two Pixy2 cameras share one SPI bus.
-                         // NOTE: confirm this class name/constructor matches the
-                         // version of the Pixy2 Arduino library you have installed -
-                         // some versions call init() with a cs pin, others take it
-                         // in the constructor. Adjust setup() below if needed.
+#include <Pixy2.h>     // Left Pixy2 - standard SPI (ICSP header), sole device on the bus
+#include <Pixy2UART.h> // Right Pixy2 - UART, hardwired by the library to use Serial1
+                       // (Mega pins 18=TX1, 19=RX1). Splitting interfaces like this
+                       // avoids sharing one SPI bus between two Pixy2 cameras, which
+                       // is a known source of "no response" / conflict issues.
 
 // ================= USER-CONFIGURABLE CONSTANTS =================
-
-// --- Pixy2 chip-select pins (TODO: set to whatever CS pins you wired) ---
-const int PIXY_LEFT_CS = 2;
-const int PIXY_RIGHT_CS = 3;
+// (No CS pins needed anymore - left Pixy2 uses the dedicated SPI/ICSP header,
+//  right Pixy2 connects via its UART pins straight to Mega Serial1: TX->19(RX1), RX->18(TX1).)
 
 // --- Arm motor driver pins (TODO: set to your actual M1/M2 control pins) ---
 // Assumes a simple driver/relay where HIGH = motor on. If you're using a
@@ -58,8 +72,8 @@ const uint8_t SensorCount = 8;
 uint16_t sensorValues[SensorCount];
 
 // ================= PIXY2 =================
-Pixy2SPI_SS pixyLeft;
-Pixy2SPI_SS pixyRight;
+Pixy2 pixyLeft;      // SPI (ICSP header)
+Pixy2UART pixyRight; // UART on Serial1 (Mega pins 18/19)
 
 // ================= STATE MACHINE =================
 enum RobotState
@@ -103,9 +117,9 @@ void setup()
     // and call qtr.calibrate() repeatedly). Skipped here since you likely
     // already have this in your main sketch.
 
-    // Pixy2 init - TODO: verify against your installed Pixy2 library version.
-    pixyLeft.init(PIXY_LEFT_CS);
-    pixyRight.init(PIXY_RIGHT_CS);
+    pixyLeft.init();  // SPI, default ICSP header
+    pixyRight.init(); // UART, defaults to Serial1 @ 19200 baud (see Pixy2UART.h if you
+                      // want to raise the baud rate - pass it as an argument to init()).
 
     Serial.println("agBOT harvest state machine ready.");
 }
@@ -234,7 +248,8 @@ void stopAllWheels()
 
 // ================= PIXY2 DETECTION =================
 
-bool seesDoublePlant(Pixy2SPI_SS &pixy)
+template <typename T>
+bool seesDoublePlant(T &pixy)
 {
     pixy.ccc.getBlocks();
     bool sawSig1 = false;
