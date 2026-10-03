@@ -9,8 +9,8 @@ void setup()
 {
     // configure the sensors
     qtr.setTypeRC();
-    qtr.setSensorPins((const uint8_t[]){23, 24, 25, 26, 27, 28, 29, 30}, SensorCount);
-    qtr.setEmitterPin(22);
+    qtr.setSensorPins((const uint8_t[]){25, 26, 27, 28, 29, 30, 31, 32}, SensorCount);
+    qtr.setEmitterPin(24);
 
     delay(500);
     pinMode(LED_BUILTIN, OUTPUT);
