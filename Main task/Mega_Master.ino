@@ -123,8 +123,8 @@ const uint8_t SIG_PLANT = 1;
 const int ARM1_X_MIN = 80;
 const int ARM1_X_MAX = 90;
 
-const int ARM2_X_MIN = 260;
-const int ARM2_X_MAX = 300;
+const int ARM2_X_MIN = 200;
+const int ARM2_X_MAX = 280;
 
 // Reject small blocks: noise, distant plants, stray pixels.
 const int MIN_BLOCK_AREA = 300; // width * height, in pixels
@@ -148,8 +148,8 @@ long triggerArea = 0;
 // MOTION TUNING
 // ======================================================
 
-const int MAX_SPEED = 80;
-const int BASE_SPEED = 60;
+const int MAX_SPEED = 60;
+const int BASE_SPEED = 45;
 
 float Kp = 0.06;
 float Kd = 0.025;
@@ -230,7 +230,7 @@ const int COUNT_MIN_AREA = 300;
 
 // A block must have been tracked by the Pixy for this many frames before
 // it counts (rejects one-frame flickers). ~60 frames per second.
-const uint8_t COUNT_MIN_AGE = 10;
+const uint8_t COUNT_MIN_AGE = 30;
 
 // After a counted block has been missing for this many camera polls, its
 // tracking index may be reused, so it can be counted again.
@@ -935,27 +935,63 @@ void calibrateQTR()
 // 180 SPIN (currently not triggered by anything)
 // ======================================================
 
-// Time to sweep 180 degrees at TURN_SPEED. Tune on the field:
-// run it, see how far past (or short of) reversed it lands, adjust.
-const unsigned long SPIN_180_MS = 2900;
-
 // Which way the robot rotates during a 180. Pick whichever
 // clears your row end without clipping the plants.
-const bool SPIN_180_GOES_LEFT = true;
+const bool SPIN_180_GOES_LEFT = false;
 
 // Speed of the 180 spin (0-255). Independent of TURN_SPEED, BASE_SPEED and MAX_SPEED.
-const int SPIN_180_SPEED = 100;
+const int SPIN_180_SPEED = 80;
 
-// Extra speed on the reversing side. Your tuned value was 13 at speed 50,
-// so this keeps the same ratio at the new speed.
+// The QTR is ignored for this long at the start of the spin, so it does not
+// see the line the robot is leaving (or a crossing line) and stop early.
+// Your old timed spin took about 2900 ms at speed 80, so 1500 ms keeps the
+// QTR blind for roughly the first half of the turn. Tune it from the log
+// line the spin prints.
+const unsigned long SPIN_QTR_BLIND_MS = 1500;
 
-// Retune this on the robot (see below).
+// A sensor "sees the white line" when its calibrated value is below this
+// (calibration scales 0 = white, 1000 = black).
+const uint16_t SPIN_LINE_SEEN_BELOW = 500;
+
+// How many sensors must see the line to end the spin.
+const uint8_t SPIN_MIN_SENSORS = 2;
+
+// Safety only: stop spinning after this long even if the line was never
+// found, so the robot cannot spin forever. Make it large (but not huge).
+const unsigned long SPIN_MAX_MS = 8000;
+
+// True when enough QTR sensors are over the WHITE line.
+// (lineDetected() above looks for dark, which is the wrong way round for a
+// white line, so the spin uses this instead.)
+bool whiteLineSeen()
+{
+    qtr.readCalibrated(sensorValues);
+
+    uint8_t count = 0;
+
+    for (uint8_t i = 0; i < SensorCount; i++)
+    {
+        if (sensorValues[i] < SPIN_LINE_SEEN_BELOW)
+        {
+            count++;
+        }
+    }
+
+    return count >= SPIN_MIN_SENSORS;
+}
+
 void spin180()
 {
+    if (!ENABLE_DRIVING)
+    {
+        Serial.println(F("spin180 skipped (driving disabled)"));
+        return;
+    }
+
     if (SPIN_180_GOES_LEFT)
     {
-        setLeftMotors(SPIN_180_SPEED);
-        setRightMotors(-SPIN_180_SPEED);
+        setLeftMotors(-SPIN_180_SPEED);
+        setRightMotors(SPIN_180_SPEED);
     }
     else
     {
@@ -963,12 +999,37 @@ void spin180()
         setRightMotors(-SPIN_180_SPEED);
     }
 
-    delay(SPIN_180_MS);
+    unsigned long startTime = millis();
+    bool found = false;
+
+    while (millis() - startTime < SPIN_MAX_MS)
+    {
+        if (millis() - startTime >= SPIN_QTR_BLIND_MS && whiteLineSeen())
+        {
+            found = true;
+            break;
+        }
+    }
+
     stopMotors();
+
+    Serial.print('[');
+    Serial.print(millis());
+    if (found)
+    {
+        Serial.print(F(" ms] Spin done: line found after "));
+        Serial.print(millis() - startTime);
+        Serial.println(F(" ms"));
+    }
+    else
+    {
+        Serial.print(F(" ms] SPIN TIMEOUT: line never found after "));
+        Serial.print(SPIN_MAX_MS);
+        Serial.println(F(" ms"));
+    }
 
     lastError = 0;
 }
-
 
 // ======================= COPY FROM HERE =======================
 
