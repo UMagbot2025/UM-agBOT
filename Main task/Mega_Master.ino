@@ -230,7 +230,7 @@ const int COUNT_MIN_AREA = 300;
 
 // A block must have been tracked by the Pixy for this many frames before
 // it counts (rejects one-frame flickers). ~60 frames per second.
-const uint8_t COUNT_MIN_AGE = 30;
+const uint8_t COUNT_MIN_AGE = 40;
 
 // After a counted block has been missing for this many camera polls, its
 // tracking index may be reused, so it can be counted again.
@@ -299,10 +299,12 @@ void countPlantsInFrame()
         countedIndex[idx] = true;
         missedPolls[idx] = 0;
 
-        if (sig == SIG_YELLOW)
+        if (sig == SIG_YELLOW) {
             yellowCount++;
-        else
+            greenCount--;
+        } else {
             greenCount++;
+        }
 
         Serial.print('[');
         Serial.print(millis());
