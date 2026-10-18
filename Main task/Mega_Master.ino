@@ -148,8 +148,8 @@ long triggerArea = 0;
 // MOTION TUNING
 // ======================================================
 
-const int MAX_SPEED = 60;
-const int BASE_SPEED = 45;
+const int MAX_SPEED = 70;
+const int BASE_SPEED = 55;
 
 float Kp = 0.06;
 float Kd = 0.025;
@@ -226,15 +226,16 @@ const uint8_t SIG_GREEN = 2;
 const int TOTAL_HOLDERS = 10; // 5 per row, 2 rows
 
 // Ignore blocks smaller than this (width * height, pixels).
-const int COUNT_MIN_AREA = 300;
+const int COUNT_MIN_AREA_YELLOW = 100;
+const int COUNT_MIN_AREA_GREEN  = 400;
 
 // A block must have been tracked by the Pixy for this many frames before
 // it counts (rejects one-frame flickers). ~60 frames per second.
-const uint8_t COUNT_MIN_AGE = 40;
+const uint8_t COUNT_MIN_AGE = 20;
 
 // After a counted block has been missing for this many camera polls, its
 // tracking index may be reused, so it can be counted again.
-const uint8_t COUNT_FORGET_POLLS = 10;
+const uint8_t COUNT_FORGET_POLLS = 30;
 
 // ---------- IR end-of-run settings (edit these) ----------
 const uint8_t IR_END_PIN = 23;
@@ -250,7 +251,6 @@ const unsigned long IR_CONFIRM_MS = 20;
 // ---------- State ----------
 
 uint16_t yellowCount = 0;
-uint16_t greenCount = 0;
 
 bool countedIndex[256];   // this Pixy tracking index has already been counted
 uint8_t missedPolls[256]; // polls in a row this counted index was not seen
@@ -267,76 +267,14 @@ bool runFinished = false;
 
 // ---------- Counting ----------
 
-/*
-   Call right after a successful pixy.ccc.getBlocks(). Each tracked object
-   (Pixy tracking index) is counted once, however many frames it stays in
-   view.
-*/
-void countPlantsInFrame()
-{
-    bool seen[256] = {false};
+bool ignoredIndex[256];      // seen during the spin: never counted
+uint8_t ignoredMissed[256];
+bool countingPaused = false; // true while the robot is spinning
 
-    for (int i = 0; i < pixy.ccc.numBlocks; i++)
-    {
-        uint8_t idx = pixy.ccc.blocks[i].m_index;
-        seen[idx] = true;
-
-        uint16_t sig = pixy.ccc.blocks[i].m_signature;
-        if (sig != SIG_YELLOW && sig != SIG_GREEN)
-            continue;
-
-        long area = (long)pixy.ccc.blocks[i].m_width *
-                    (long)pixy.ccc.blocks[i].m_height;
-        if (area < COUNT_MIN_AREA)
-            continue;
-
-        if (pixy.ccc.blocks[i].m_age < COUNT_MIN_AGE)
-            continue;
-
-        if (countedIndex[idx])
-            continue;
-
-        countedIndex[idx] = true;
-        missedPolls[idx] = 0;
-
-        if (sig == SIG_YELLOW) {
-            yellowCount++;
-            greenCount--;
-        } else {
-            greenCount++;
-        }
-
-        Serial.print('[');
-        Serial.print(millis());
-        Serial.print(F(" ms] COUNTED "));
-        Serial.print(sig == SIG_YELLOW ? F("YELLOW") : F("GREEN"));
-        Serial.print(F(" (x="));
-        Serial.print(pixy.ccc.blocks[i].m_x);
-        Serial.print(F(", index="));
-        Serial.print(idx);
-        Serial.print(F("). Yellow="));
-        Serial.print(yellowCount);
-        Serial.print(F(" Green="));
-        Serial.println(greenCount);
-    }
-
-    // Forget counted objects that have left the view, so a reused
-    // tracking index can be counted again.
-    for (int idx = 0; idx < 256; idx++)
-    {
-        if (!countedIndex[idx])
-            continue;
-
-        if (seen[idx])
-        {
-            missedPolls[idx] = 0;
-        }
-        else if (++missedPolls[idx] >= COUNT_FORGET_POLLS)
-        {
-            countedIndex[idx] = false;
-        }
-    }
-}
+// After the spin, ignore every block already in view (it was first
+// seen during the spin). Set to false if the first holder of the
+// return row is being missed.
+const bool IGNORE_BLOCKS_SEEN_DURING_SPIN = true;
 
 /*
    Polls the Pixy and counts. Use this only where plantArmToRun() is NOT
@@ -353,8 +291,6 @@ void pollPixyForCounting()
 
     if (res == PIXY_RESULT_BUSY || res < 0)
         return;
-
-    countPlantsInFrame();
 }
 
 // ---------- End of run (IR) ----------
@@ -386,15 +322,15 @@ bool handleIrEndLogic()
 
     irLineCount++;
 
-    Serial.print('[');
-    Serial.print(millis());
-    Serial.print(F(" ms] IR saw the white line (crossing #"));
-    Serial.print(irLineCount);
-    Serial.println(')');
+    // Serial.print('[');
+    // Serial.print(millis());
+    // Serial.print(F(" ms] IR saw the white line (crossing #"));
+    // Serial.print(irLineCount);
+    // Serial.println(')');
 
     if (irLineCount == 1)
     {
-        Serial.println(F("  -> spinning 180 in place"));
+        //Serial.println(F("  -> spinning 180 in place"));
         stopMotors();
         spin180();
         return true;
@@ -417,24 +353,9 @@ void finishRun()
     stopMotors();
 
     int doubles = yellowCount;
-    int singles = (int)greenCount - (int)yellowCount;
-    int empties = TOTAL_HOLDERS - (int)greenCount;
 
-    showStatus(doubles, singles, empties);
+    showStatus(doubles);
     setAllLeds(true);
-
-    Serial.print('[');
-    Serial.print(millis());
-    Serial.print(F(" ms] END OF RUN. Yellow="));
-    Serial.print(yellowCount);
-    Serial.print(F(" Green="));
-    Serial.print(greenCount);
-    Serial.print(F(" -> D="));
-    Serial.print(doubles);
-    Serial.print(F(" S="));
-    Serial.print(singles);
-    Serial.print(F(" E="));
-    Serial.println(empties);
 }
 
 // ======================================================
@@ -463,35 +384,34 @@ void setup()
 
     pixy.init();
     initEndSensor();
-    // pixy.setLamp(1, 1);
+    // pixy.setLamp(1, 1); don't turn on the lamp unless you know what you are doing
 
     if (ENABLE_DRIVING)
     {
         qtr.setTypeRC();
         qtr.setSensorPins(sensorPins, SensorCount);
         qtr.setEmitterPin(QTR_EMITTER_PIN);
-
         calibrateQTR();
     }
 
-    Serial.println(F("=== Mega master ready ==="));
+    // Serial.println(F("=== Mega master ready ==="));
     if (!ENABLE_DRIVING)
     {
-        Serial.println(F("ARM TEST MODE: QTR and drive motors disabled."));
+        // Serial.println(F("ARM TEST MODE: QTR and drive motors disabled."));
     }
-    Serial.print(F("Arm 1 window: x "));
-    Serial.print(ARM1_X_MIN);
-    Serial.print('-');
-    Serial.print(ARM1_X_MAX);
-    Serial.println(F(" -> GO pin 40 (Uno D2)"));
-    Serial.print(F("Arm 2 window: x "));
-    Serial.print(ARM2_X_MIN);
-    Serial.print('-');
-    Serial.print(ARM2_X_MAX);
-    Serial.println(F(" -> GO pin 42 (Uno D10)"));
-    Serial.print(F("Camera blind time after each arm: "));
-    Serial.print(CAMERA_BLIND_TIME);
-    Serial.println(F(" ms"));
+    // Serial.print(F("Arm 1 window: x "));
+    // Serial.print(ARM1_X_MIN);
+    // Serial.print('-');
+    // Serial.print(ARM1_X_MAX);
+    // Serial.println(F(" -> GO pin 40 (Uno D2)"));
+    // Serial.print(F("Arm 2 window: x "));
+    // Serial.print(ARM2_X_MIN);
+    // Serial.print('-');
+    // Serial.print(ARM2_X_MAX);
+    // Serial.println(F(" -> GO pin 42 (Uno D10)"));
+    // Serial.print(F("Camera blind time after each arm: "));
+    // Serial.print(CAMERA_BLIND_TIME);
+    // Serial.println(F(" ms"));
 
     runState = STATE_DRIVING;
     lastError = 0;
@@ -555,26 +475,6 @@ void handleDriving()
         armCommandTime = millis();
         armCommandCount++;
 
-        Serial.print('[');
-        Serial.print(armCommandTime);
-        Serial.print(F(" ms] ARM COMMAND #"));
-        Serial.print(armCommandCount);
-        Serial.print(F(": S1 x="));
-        Serial.print(triggerX);
-        Serial.print(F(" (area="));
-        Serial.print(triggerArea);
-        Serial.print(F(") is in the arm "));
-        Serial.print(arm == ARM_1 ? 1 : 2);
-        Serial.print(F(" window ("));
-        Serial.print(arm == ARM_1 ? ARM1_X_MIN : ARM2_X_MIN);
-        Serial.print('-');
-        Serial.print(arm == ARM_1 ? ARM1_X_MAX : ARM2_X_MAX);
-        Serial.print(F("). Sending GO on pin "));
-        Serial.print(goPin);
-        Serial.print(F(" -> LOW (Uno runs arm "));
-        Serial.print(arm == ARM_1 ? F("1 / M1") : F("2 / M2"));
-        Serial.println(F("). Motors stopped, waiting for DONE."));
-
         runState = STATE_ARM_RUNNING;
         return;
     }
@@ -594,23 +494,10 @@ void handleArmRunning()
         // Release the request. The Uno will clear its done line in response.
         digitalWrite(goPinFor(activeArm), HIGH);
 
+        if (activeArm == ARM_2)
+            yellowCount++;
+
         unsigned long now = millis();
-
-        Serial.print('[');
-        Serial.print(now);
-        Serial.print(F(" ms] ARM COMMAND #"));
-        Serial.print(armCommandCount);
-        Serial.print(F(": DONE (pin 41) received after "));
-        Serial.print(now - armCommandTime);
-        Serial.print(F(" ms. GO on pin "));
-        Serial.print(goPinFor(activeArm));
-        Serial.println(F(" released (HIGH)."));
-
-        Serial.print('[');
-        Serial.print(now);
-        Serial.print(F(" ms] Camera blind for "));
-        Serial.print(CAMERA_BLIND_TIME);
-        Serial.println(F(" ms (not looking for S1)."));
 
         blindStartTime = now;
         lastError = 0;
@@ -629,9 +516,9 @@ void handleCameraBlind()
 
     if (millis() - blindStartTime >= CAMERA_BLIND_TIME)
     {
-        Serial.print('[');
-        Serial.print(millis());
-        Serial.println(F(" ms] Camera blind time over. Looking for S1 again."));
+        // Serial.print('[');
+        // Serial.print(millis());
+        // Serial.println(F(" ms] Camera blind time over. Looking for S1 again."));
 
         s1WasVisible = false; // so a stale "S1 lost" is not printed
         runState = STATE_DRIVING;
@@ -695,7 +582,6 @@ ArmSelect plantArmToRun()
     if (res == PIXY_RESULT_BUSY || res < 0)
         return ARM_NONE;
     
-    countPlantsInFrame();
     long bestArea = 0; // largest S1 block overall (for logging)
     int bestX = -1;
 
@@ -734,9 +620,9 @@ ArmSelect plantArmToRun()
     {
         if (LOG_S1_X && s1WasVisible)
         {
-            Serial.print('[');
-            Serial.print(millis());
-            Serial.println(F(" ms] S1 lost (no block in view)"));
+            // Serial.print('[');
+            // Serial.print(millis());
+            // Serial.println(F(" ms] S1 lost (no block in view)"));
         }
         s1WasVisible = false;
         return ARM_NONE;
@@ -750,12 +636,12 @@ ArmSelect plantArmToRun()
         {
             lastS1LogTime = millis();
 
-            Serial.print('[');
-            Serial.print(lastS1LogTime);
-            Serial.print(F(" ms] S1 x="));
-            Serial.print(bestX);
-            Serial.print(F(" area="));
-            Serial.println(bestArea);
+            // Serial.print('[');
+            // Serial.print(lastS1LogTime);
+            // Serial.print(F(" ms] S1 x="));
+            // Serial.print(bestX);
+            // Serial.print(F(" area="));
+            // Serial.println(bestArea);
         }
     }
     s1WasVisible = true;
@@ -986,9 +872,11 @@ void spin180()
 {
     if (!ENABLE_DRIVING)
     {
-        Serial.println(F("spin180 skipped (driving disabled)"));
+        // Serial.println(F("spin180 skipped (driving disabled)"));
         return;
     }
+
+    countingPaused = true;
 
     if (SPIN_180_GOES_LEFT)
     {
@@ -1015,19 +903,19 @@ void spin180()
 
     stopMotors();
 
-    Serial.print('[');
-    Serial.print(millis());
+    // Serial.print('[');
+    // Serial.print(millis());
     if (found)
     {
-        Serial.print(F(" ms] Spin done: line found after "));
-        Serial.print(millis() - startTime);
-        Serial.println(F(" ms"));
+        // Serial.print(F(" ms] Spin done: line found after "));
+        // Serial.print(millis() - startTime);
+        // Serial.println(F(" ms"));
     }
     else
     {
-        Serial.print(F(" ms] SPIN TIMEOUT: line never found after "));
-        Serial.print(SPIN_MAX_MS);
-        Serial.println(F(" ms"));
+        // Serial.print(F(" ms] SPIN TIMEOUT: line never found after "));
+        // Serial.print(SPIN_MAX_MS);
+        // Serial.println(F(" ms"));
     }
 
     lastError = 0;
@@ -1066,16 +954,10 @@ void setAllLeds(bool on)
     digitalWrite(GREEN_LED_PIN, on ? HIGH : LOW);
 }
 
-// Shows "D : <d>, S : <s>, E : <e>".
-// That text is 19 characters, so a 16-column display breaks it after
-// the second value:   D : 0, S : 0,
-//                     E : 0
-// A 20-column display shows it on one row.
-void showStatus(int d, int s, int e)
+void showStatus(int d)
 {
     char whole[32];
-    snprintf(whole, sizeof(whole), "D : %d, S : %d, E : %d", d, s, e);
-
+    snprintf(whole, sizeof(whole), "Plants Knocked: %d", d);
     lcd.clear();
 
     if (strlen(whole) <= LCD_COLS)
@@ -1086,20 +968,13 @@ void showStatus(int d, int s, int e)
     else
     {
         char first[32];
-        char second[16];
-        snprintf(first, sizeof(first), "D : %d, S : %d,", d, s);
-        snprintf(second, sizeof(second), "E : %d", e);
+        char second[32];
+        snprintf(first, sizeof(first), "Plants Knocked:");
+        snprintf(second, sizeof(second), "%d", d);
 
         lcd.setCursor(0, 0);
         lcd.print(first);
         lcd.setCursor(0, 1);
         lcd.print(second);
     }
-}
-
-// Lights all the LEDs and shows D : 0, S : 0, E : 0.
-void indicatorTest()
-{
-    setAllLeds(true);
-    showStatus(0, 0, 0);
 }
